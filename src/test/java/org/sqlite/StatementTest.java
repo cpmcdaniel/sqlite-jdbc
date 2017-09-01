@@ -29,7 +29,7 @@ public class StatementTest
 
     @Before
     public void connect() throws Exception {
-        conn = DriverManager.getConnection("jdbc:sqlite:");
+        conn = DriverManager.getConnection("jdbc:sqlite:mike.db");
         stat = conn.createStatement();
     }
 
@@ -39,33 +39,44 @@ public class StatementTest
         conn.close();
     }
 
+    // Some of these may fail on purpose, pick a test to run like:
+    // $ mvn -Dtest=StatementTest#executeUpdate3 test
+
     @Test
-    public void executeUpdate() throws SQLException {
-        assertEquals(stat.executeUpdate("create table s1 (c1);"), 0);
-        assertEquals(stat.executeUpdate("insert into s1 values (0);"), 1);
-        assertEquals(stat.executeUpdate("insert into s1 values (1);"), 1);
-        assertEquals(stat.executeUpdate("insert into s1 values (2);"), 1);
-        assertEquals(stat.executeUpdate("update s1 set c1 = 5;"), 3);
-        // count_changes_pgrama. truncate_optimization
-        assertEquals(stat.executeUpdate("delete from s1;"), 3);
-
-        // multiple SQL statements
-        assertEquals(
-            stat.executeUpdate("insert into s1 values (11);" +
-                               "insert into s1 values (12)"),
-            2);
-        assertEquals(
-            stat.executeUpdate("update s1 set c1 = 21 where c1 = 11;" +
-                               "update s1 set c1 = 22 where c1 = 12;" +
-                               "update s1 set c1 = 23 where c1 = 13"),
-            2); // c1 = 13 does not exist
-        assertEquals(
-            stat.executeUpdate("delete from s1 where c1 = 21;" +
-                               "delete from s1 where c1 = 22;" +
-                               "delete from s1 where c1 = 23"),
-            2); // c1 = 23 does not exist
-
+    public void executeUpdate1() throws SQLException, InterruptedException {
+        assertEquals(stat.executeUpdate("create table s1 (c1 TEXT PRIMARY KEY);"), 0);
+        assertEquals(stat.executeUpdate("create table s2 (c21 TEXT, FOREIGN KEY(c21) REFERENCES s1(c1));"), 0);
+        assertEquals(stat.executeUpdate("PRAGMA foreign_keys = ON;"), 0);
+        for(int i=1; i<11; i++) {
+            assertEquals(stat.executeUpdate("insert into s1 values (0);"), 1);
+            assertEquals(stat.executeUpdate("insert into s2 values (0);"), 1);
+            assertEquals(stat.executeUpdate("delete from s2 where c21=0;"), 1);
+            assertEquals(stat.executeUpdate("delete from s1 where c1=0;"), 1);
+        }
+        assertEquals(stat.executeUpdate("drop table s2;"), 0);
         assertEquals(stat.executeUpdate("drop table s1;"), 0);
+    }
+
+    @Test
+    public void executeUpdate2() throws SQLException, InterruptedException {
+        for(int i=1; i<11; i++) {
+            assertEquals(stat.executeUpdate("create table 'race2' (c1 TEXT PRIMARY KEY);"), 0);
+            assertEquals(stat.executeUpdate("drop table 'race2';"), 0);
+        }
+    }
+
+    @Test
+    public void executeUpdate3() throws SQLException, InterruptedException {
+        for(int i=1; i<10001; i++) {
+            // Try with prepared statements per
+            // https://github.com/clojure/java.jdbc/blob/0ea6110529b04337dc4bc8e6c23bc9f566027e45/src/main/clojure/clojure/java/jdbc.clj#L477
+            // and
+            // https://github.com/clojure/java.jdbc/blob/0ea6110529b04337dc4bc8e6c23bc9f566027e45/src/main/clojure/clojure/java/jdbc.clj#L846
+            PreparedStatement testCreateStatement = conn.prepareStatement("create table 'race3' (c1 TEXT PRIMARY KEY);");
+            assertEquals(testCreateStatement.executeUpdate(), 0);
+            PreparedStatement testDropStatement = conn.prepareStatement("drop table 'race3';");
+            assertEquals(testDropStatement.executeUpdate(), 0);
+        }
     }
 
     @Test
@@ -389,26 +400,26 @@ public class StatementTest
     public void bytesTest() throws SQLException, UnsupportedEncodingException {
         stat.executeUpdate("CREATE TABLE blobs (Blob BLOB)");
         PreparedStatement prep = conn.prepareStatement("insert into blobs values(?)");
-        
+
         String str = "This is a test";
         byte[] strBytes = str.getBytes("UTF-8");
-        
+
         prep.setBytes(1, strBytes);
         prep.executeUpdate();
-        
+
         ResultSet rs = stat.executeQuery("select * from blobs");
         assertTrue(rs.next());
 
         byte[] resultBytes = rs.getBytes(1);
         assertArrayEquals(strBytes, resultBytes);
-        
+
         String resultStr = rs.getString(1);
         assertEquals(str, resultStr);
 
         byte[] resultBytesAfterConversionToString = rs.getBytes(1);
         assertArrayEquals(strBytes, resultBytesAfterConversionToString);
     }
-    
+
     @Test
     public void dateTimeTest() throws SQLException {
         Date day = new Date(new java.util.Date().getTime());
