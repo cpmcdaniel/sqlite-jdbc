@@ -160,6 +160,23 @@ public class TransactionTest
     }
 
     @Test
+    public void dropTableRace() throws SQLException {
+	conn1.setAutoCommit(false);
+	conn2.setAutoCommit(false);
+	for (int i = 0; i < 100; i++) {
+	    stat1 = conn1.createStatement();
+	    //stat1.executeUpdate("begin immediate;");
+	    stat1.executeUpdate("create table 'droprace' ('id' TEXT PRIMARY KEY);");
+	    stat1.close();
+	    conn1.commit();
+	    stat2 = conn2.createStatement();
+	    //stat2.executeUpdate("begin immediate;");
+            stat2.executeUpdate("drop table 'droprace';");	
+	    stat2.close();
+	    conn2.commit();
+	}
+    }
+    @Test
     public void insert() throws SQLException {
         ResultSet rs;
         String countSql = "select count(*) from trans;";
